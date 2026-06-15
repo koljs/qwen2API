@@ -1,0 +1,104 @@
+name: Build Magisk Module
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend (arm64)
+        working-directory: backend
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -trimpath -ldflags="-s -w" -o ../build/arm64/qwen2api .
+        env:
+          GOARCH: arm64
+
+      - name: Build backend (arm)
+        working-directory: backend
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm \
+            go build -trimpath -ldflags="-s -w" -o ../build/arm/qwen2api .
+        env:
+          GOARCH: arm
+
+      - name: Assemble Magisk module (arm64)
+        run: |
+          STAGING="build/module-arm64"
+          mkdir -p "$STAGING/frontend/dist"
+
+          cp magisk/module.prop "$STAGING/"
+          cp magisk/service.sh "$STAGING/"
+          chmod 755 "$STAGING/service.sh"
+          cp build/arm64/qwen2api "$STAGING/"
+          chmod 755 "$STAGING/qwen2api"
+          cp -r frontend/dist/. "$STAGING/frontend/dist/"
+
+          cd "$STAGING"
+          zip -r "$GITHUB_WORKSPACE/build/qwen2api-magisk-linux-arm64.zip" .
+
+      - name: Assemble Magisk module (arm)
+        run: |
+          STAGING="build/module-arm"
+          mkdir -p "$STAGING/frontend/dist"
+
+          cp magisk/module.prop "$STAGING/"
+          cp magisk/service.sh "$STAGING/"
+          chmod 755 "$STAGING/service.sh"
+          cp build/arm/qwen2api "$STAGING/"
+          chmod 755 "$STAGING/qwen2api"
+          cp -r frontend/dist/. "$STAGING/frontend/dist/"
+
+          cd "$STAGING"
+          zip -r "$GITHUB_WORKSPACE/build/qwen2api-magisk-linux-arm.zip" .
+
+      - name: Upload arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen2api-magisk-arm64
+          path: build/qwen2api-magisk-linux-arm64.zip
+
+      - name: Upload arm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen2api-magisk-arm
+          path: build/qwen2api-magisk-linux-arm.zip
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/qwen2api-magisk-linux-arm64.zip
+            build/qwen2api-magisk-linux-arm.zip
+          generate_release_notes: true
