@@ -69,6 +69,11 @@ export ADMIN_KEY="${ADMIN_KEY:-}"
 export PORT="${PORT:-7860}"
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
+# Fix TLS certificate verification for statically linked Go binary.
+# CGO_ENABLED=0 builds use Go's pure TLS which doesn't read Android's CA store.
+# Point Go to Android's system and user-added CA certificate directories.
+export SSL_CERT_DIR="/system/etc/security/cacerts:/data/misc/user/0/cacerts-added"
+
 # Fix executable permission (may be lost during Magisk module installation)
 chmod 755 "$BIN"
 
