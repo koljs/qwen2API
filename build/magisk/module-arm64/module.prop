@@ -1,6 +1,0 @@
-id=qwen2api
-name=qwen2API
-version=v2.0.0
-versionCode=20000
-author=custom
-description=Qwen Web protocol gateway with OpenAI/Anthropic/Gemini compatible APIs. Runs as a background HTTP service on boot.

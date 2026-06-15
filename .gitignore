@@ -40,6 +40,8 @@ fix_*.py
 *.sln
 *.sw?
 
+build/
+
 # local cleanup
 tests/
 docs/superpowers/
