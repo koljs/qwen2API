@@ -12,15 +12,27 @@ type ToolNameMap struct {
 }
 
 var explicitToolNameAliases = map[string]string{
-	"Read":         "fs_open_file",
-	"Write":        "fs_put_file",
-	"Edit":         "fs_patch_file",
-	"Bash":         "shell_run",
-	"Grep":         "text_search",
-	"Glob":         "path_find",
-	"NotebookEdit": "notebook_patch",
-	"WebFetch":     "http_get_url",
-	"WebSearch":    "web_query",
+	"Read":               "fs_open_file",
+	"Write":              "fs_put_file",
+	"Edit":               "fs_patch_file",
+	"Bash":               "shell_run",
+	"Grep":               "text_search",
+	"Glob":               "path_find",
+	"NotebookEdit":       "notebook_patch",
+	"WebFetch":           "http_get_url",
+	"WebSearch":          "web_query",
+	"LS":                 "path_find",
+	"RunCommand":         "shell_run",
+	"CheckCommandStatus": "shell_run",
+	"StopCommand":        "shell_run",
+	"SearchCodebase":     "text_search",
+	"TodoWrite":          "task_update",
+	"AskUserQuestion":    "ask_user",
+	"DeleteFile":         "fs_put_file",
+	"OpenPreview":        "fs_open_file",
+	"Skill":              "skill_invoke",
+	"Task":               "task_create",
+	"Schedule":           "cron_create",
 }
 
 var reverseToolNameAliases = func() map[string]string {

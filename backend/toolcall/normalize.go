@@ -50,6 +50,11 @@ func qwenToolAlias(name string) string {
 		"notebook_patch": "NotebookEdit",
 		"http_get_url":   "WebFetch",
 		"web_query":      "WebSearch",
+		"task_update":    "TodoWrite",
+		"ask_user":       "AskUserQuestion",
+		"skill_invoke":   "Skill",
+		"task_create":    "Task",
+		"cron_create":    "Schedule",
 	}
 	lowered := strings.ToLower(trimmed)
 	if mapped, ok := explicit[lowered]; ok {

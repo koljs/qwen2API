@@ -1237,17 +1237,17 @@ func qwenSafeToolName(name string) string {
 		return ""
 	}
 	switch name {
-	case "Read":
+	case "Read", "OpenPreview":
 		return "fs_open_file"
-	case "Write":
+	case "Write", "DeleteFile":
 		return "fs_put_file"
 	case "Edit":
 		return "fs_patch_file"
-	case "Bash":
+	case "Bash", "RunCommand", "CheckCommandStatus", "StopCommand":
 		return "shell_run"
-	case "Grep":
+	case "Grep", "SearchCodebase":
 		return "text_search"
-	case "Glob":
+	case "Glob", "LS":
 		return "path_find"
 	case "NotebookEdit":
 		return "notebook_patch"
@@ -1255,6 +1255,16 @@ func qwenSafeToolName(name string) string {
 		return "http_get_url"
 	case "WebSearch":
 		return "web_query"
+	case "TodoWrite":
+		return "task_update"
+	case "AskUserQuestion":
+		return "ask_user"
+	case "Skill":
+		return "skill_invoke"
+	case "Task":
+		return "task_create"
+	case "Schedule":
+		return "cron_create"
 	}
 	if qwenSafeAliasIsCanonical(name) || strings.HasPrefix(name, "u_") {
 		return name
@@ -1264,7 +1274,7 @@ func qwenSafeToolName(name string) string {
 
 func qwenSafeAliasIsCanonical(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "fs_open_file", "fs_put_file", "fs_patch_file", "shell_run", "text_search", "path_find", "notebook_patch", "http_get_url", "web_query":
+	case "fs_open_file", "fs_put_file", "fs_patch_file", "shell_run", "text_search", "path_find", "notebook_patch", "http_get_url", "web_query", "task_update", "ask_user", "skill_invoke", "task_create", "cron_create":
 		return true
 	default:
 		return false
