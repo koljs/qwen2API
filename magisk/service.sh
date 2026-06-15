@@ -69,6 +69,9 @@ export ADMIN_KEY="${ADMIN_KEY:-}"
 export PORT="${PORT:-7860}"
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
+# Fix executable permission (may be lost during Magisk module installation)
+chmod 755 "$BIN"
+
 # Start the daemon
 nohup "$BIN" >> "$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"

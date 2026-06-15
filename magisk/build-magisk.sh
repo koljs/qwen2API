@@ -74,7 +74,8 @@ assemble_module() {
     # Copy module metadata
     cp "$PROJECT_DIR/magisk/module.prop" "$module_dir/"
     cp "$PROJECT_DIR/magisk/service.sh" "$module_dir/"
-    chmod 755 "$module_dir/service.sh"
+    cp "$PROJECT_DIR/magisk/post-fs-data.sh" "$module_dir/"
+    chmod 755 "$module_dir/service.sh" "$module_dir/post-fs-data.sh"
 
     # Copy backend binary
     cp "$out_dir/qwen2api" "$module_dir/"

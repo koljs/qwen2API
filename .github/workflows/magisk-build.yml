@@ -59,7 +59,8 @@ jobs:
 
           cp magisk/module.prop "$STAGING/"
           cp magisk/service.sh "$STAGING/"
-          chmod 755 "$STAGING/service.sh"
+          cp magisk/post-fs-data.sh "$STAGING/"
+          chmod 755 "$STAGING/service.sh" "$STAGING/post-fs-data.sh"
           cp build/arm64/qwen2api "$STAGING/"
           chmod 755 "$STAGING/qwen2api"
           cp -r frontend/dist/. "$STAGING/frontend/dist/"
@@ -74,7 +75,8 @@ jobs:
 
           cp magisk/module.prop "$STAGING/"
           cp magisk/service.sh "$STAGING/"
-          chmod 755 "$STAGING/service.sh"
+          cp magisk/post-fs-data.sh "$STAGING/"
+          chmod 755 "$STAGING/service.sh" "$STAGING/post-fs-data.sh"
           cp build/arm/qwen2api "$STAGING/"
           chmod 755 "$STAGING/qwen2api"
           cp -r frontend/dist/. "$STAGING/frontend/dist/"
