@@ -276,8 +276,12 @@ func CoerceToolInput(name string, input any, tools []map[string]any) any {
 		renameFirstPresent(fixed, "content", "text", "body", "data", "file_content", "contents", "value")
 	case "Edit":
 		renameFirstPresent(fixed, "file_path", "path", "target_file", "filename", "file")
-	case "Bash", "PowerShell":
+	case "Bash", "PowerShell", "RunCommand", "CheckCommandStatus", "StopCommand":
 		renameFirstPresent(fixed, "command", "cmd", "script")
+	case "Glob", "LS":
+		renameFirstPresent(fixed, "pattern", "path", "glob", "dir")
+	case "Grep", "SearchCodebase":
+		renameFirstPresent(fixed, "pattern", "query", "search", "regex")
 	default:
 		if fixed["query"] == nil {
 			if queries, ok := fixed["queries"]; ok && toolAcceptsField(name, tools, "query") {
@@ -518,8 +522,12 @@ func requiredToolArgs(name string, tools []map[string]any) []string {
 		add("file_path", "content")
 	case "Edit":
 		add("file_path")
-	case "Bash", "PowerShell":
+	case "Bash", "PowerShell", "RunCommand", "CheckCommandStatus", "StopCommand":
 		add("command")
+	case "Glob", "LS":
+		add("pattern")
+	case "Grep", "SearchCodebase":
+		add("pattern")
 	}
 	return out
 }
