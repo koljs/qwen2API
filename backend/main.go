@@ -7742,6 +7742,12 @@ func extractBlockedToolNames(text string, allowedNames []string) []string {
 	for _, name := range allowedNames {
 		if strings.TrimSpace(name) != "" {
 			allowed[strings.ToLower(name)] = name
+			// Also register the obfuscated name so that blocked-tool detection
+			// can match upstream output like "Tool fs_open_file does not exist"
+			// back to the original tool name "Read".
+			if obfuscated := services.ToQwenToolName(name); obfuscated != name {
+				allowed[strings.ToLower(obfuscated)] = name
+			}
 		}
 	}
 	if len(allowed) == 0 {
@@ -7752,8 +7758,17 @@ func extractBlockedToolNames(text string, allowedNames []string) []string {
 		if len(match) < 2 {
 			continue
 		}
-		if exact, ok := allowed[strings.ToLower(match[1])]; ok {
+		matched := match[1]
+		if exact, ok := allowed[strings.ToLower(matched)]; ok {
 			out = append(out, exact)
+			continue
+		}
+		// Try reversing the obfuscation: strip u_ prefix or resolve
+		// well-known aliases (fs_open_file -> Read, etc.).
+		if resolved := services.FromQwenToolName(matched); resolved != matched {
+			if exact, ok := allowed[strings.ToLower(resolved)]; ok {
+				out = append(out, exact)
+			}
 		}
 	}
 	return out
