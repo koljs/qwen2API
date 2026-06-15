@@ -1596,7 +1596,9 @@ func isCoreToolName(name string) bool {
 	case "read", "readfile", "readfiletool", "write", "writefile", "bash", "executecommand",
 		"runcommand", "terminal", "powershell", "shell", "listdir", "listdirectory", "grep", "glob",
 		"search", "searchfiles", "edit", "editfile", "fsopenfile", "fsputfile", "fspatchfile",
-		"shellrun", "textsearch", "pathfind", "httpgeturl", "webquery":
+		"shellrun", "textsearch", "pathfind", "httpgeturl", "webquery", "searchcodebase",
+		"taskupdate", "todowrite", "askuser", "askuserquestion", "skillinvoke",
+		"taskcreate", "croncreate", "openpreview", "deletefile":
 		return true
 	default:
 		return false
@@ -1665,18 +1667,28 @@ func exampleToolParams(tool map[string]any) map[string]any {
 		return fromSchema
 	}
 	switch key {
-	case "read", "readfile", "fsopenfile":
+	case "read", "readfile", "fsopenfile", "openpreview":
 		return map[string]any{"file_path": "src/index.ts"}
 	case "write", "writefile", "fsputfile":
 		return map[string]any{"file_path": "output.txt", "content": "..."}
 	case "bash", "executecommand", "runcommand", "terminal", "powershell", "shell", "shellrun":
 		return map[string]any{"command": "ls -la"}
-	case "glob", "pathfind":
+	case "glob", "pathfind", "ls":
 		return map[string]any{"pattern": "**/*.go"}
-	case "grep", "search", "searchfiles", "textsearch":
+	case "grep", "search", "searchfiles", "textsearch", "searchcodebase":
 		return map[string]any{"pattern": "TODO"}
 	case "edit", "editfile", "fspatchfile":
 		return map[string]any{"file_path": "src/main.ts", "old_string": "old", "new_string": "new"}
+	case "taskupdate", "todowrite":
+		return map[string]any{"todos": "[]"}
+	case "askuser", "askuserquestion":
+		return map[string]any{"question": "How to proceed?"}
+	case "skillinvoke", "skill":
+		return map[string]any{"name": "example-skill"}
+	case "taskcreate", "task":
+		return map[string]any{"description": "Execute sub-task", "prompt": "Do something"}
+	case "croncreate", "schedule":
+		return map[string]any{"cron_expression": "0 8 * * *", "message": "Daily task"}
 	}
 	params := firstNonNil(tool["parameters"], tool["input_schema"])
 	props, _ := mapValue(params)["properties"].(map[string]any)

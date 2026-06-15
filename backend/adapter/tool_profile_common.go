@@ -94,6 +94,7 @@ var commonToolCapabilities = []toolCapability{
 func detectToolProfile(tools []map[string]any) cliToolProfile {
 	names := toolNamesFromTools(tools)
 	profiles := []cliToolProfile{
+		traeToolProfile(),
 		hermesToolProfile(),
 		openClawToolProfile(),
 		claudeCodeToolProfile(),
