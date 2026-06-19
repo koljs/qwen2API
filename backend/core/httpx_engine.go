@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"qwen2api-go/services"
 )
 
 func NewHTTPClient(timeout time.Duration) *http.Client {
@@ -18,10 +20,24 @@ func QwenHeaders(token string) http.Header {
 	headers := http.Header{}
 	headers.Set("Accept", "application/json, text/event-stream")
 	headers.Set("Content-Type", "application/json")
-	headers.Set("User-Agent", "Mozilla/5.0 qwen2api-go")
+	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 	headers.Set("x-request-id", QwenRequestID())
+	headers.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	headers.Set("Referer", "https://chat.qwen.ai/")
+	headers.Set("Origin", "https://chat.qwen.ai")
+	headers.Set("Connection", "keep-alive")
+	headers.Set("sec-ch-ua", `"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"`)
+	headers.Set("sec-ch-ua-mobile", "?0")
+	headers.Set("sec-ch-ua-platform", `"Windows"`)
+	headers.Set("sec-fetch-dest", "empty")
+	headers.Set("sec-fetch-mode", "cors")
+	headers.Set("sec-fetch-site", "same-origin")
 	if token != "" {
 		headers.Set("Authorization", "Bearer "+token)
+	}
+	// Baxia WAF headers
+	for k, v := range services.BaxiaHeaders(token) {
+		headers.Set(k, v)
 	}
 	return headers
 }

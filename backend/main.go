@@ -73,6 +73,7 @@ func main() {
 		logger.Warn("ADMIN_KEY is not set; configure it before using WebUI or admin APIs")
 	}
 	runMigratedPackageSelfCheck(logger)
+	services.InitBaxia()
 	if len(os.Args) > 1 && os.Args[1] == "--install-browsers" {
 		if err := installPlaywrightBrowsers(logger); err != nil {
 			logger.Error("failed to install Playwright browsers", "error", err)
@@ -7909,18 +7910,22 @@ func qwenHeaders(token string) http.Header {
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+token)
 	h.Set("x-request-id", qwenRequestID())
-	h.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	h.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 	h.Set("Accept", "application/json, text/plain, */*")
 	h.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	h.Set("Referer", qwenBaseURL+"/")
 	h.Set("Origin", qwenBaseURL)
 	h.Set("Connection", "keep-alive")
-	h.Set("sec-ch-ua", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`)
+	h.Set("sec-ch-ua", `"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"`)
 	h.Set("sec-ch-ua-mobile", "?0")
 	h.Set("sec-ch-ua-platform", `"Windows"`)
 	h.Set("sec-fetch-dest", "empty")
 	h.Set("sec-fetch-mode", "cors")
 	h.Set("sec-fetch-site", "same-origin")
+	// Baxia WAF headers
+	for k, v := range services.BaxiaHeaders(token) {
+		h.Set(k, v)
+	}
 	return h
 }
 
