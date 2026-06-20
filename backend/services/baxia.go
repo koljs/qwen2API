@@ -210,8 +210,8 @@ func lzwCompress6bit(data string) string {
 	}
 
 	w := ""
-	for i := 0; i < len(data); i++ {
-		c := string(data[i])
+	for _, r := range data {
+		c := string(r)
 
 		if _, ok := dict[c]; !ok {
 			dict[c] = dictSize
@@ -308,7 +308,9 @@ func BaxiaHeaders(token string) map[string]string {
 		cookie += ";ssxmod_itna2=" + itna2
 	}
 
-	tz := time.Now().Format("Mon Jan 02 2006 15:04:05 GMT-0700")
+	// Baxia WAF expects China Standard Time format, force CST regardless of server timezone
+	cst := time.FixedZone("CST", 8*3600)
+	tz := time.Now().In(cst).Format("Mon Jan 02 2006 15:04:05 GMT-0700") + " (China Standard Time)"
 
 	return map[string]string{
 		"bx-v":              baxiaSDKVersion,
@@ -317,6 +319,5 @@ func BaxiaHeaders(token string) map[string]string {
 		"timezone":          tz,
 		"cookie":            cookie,
 		"x-accel-buffering": "no",
-		"accept-encoding":   "gzip, deflate, br, zstd",
 	}
 }

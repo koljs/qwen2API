@@ -7912,6 +7912,7 @@ func qwenHeaders(token string) http.Header {
 	h.Set("x-request-id", qwenRequestID())
 	h.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 	h.Set("Accept", "application/json, text/plain, */*")
+	h.Set("Content-Type", "application/json")
 	h.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	h.Set("Referer", qwenBaseURL+"/")
 	h.Set("Origin", qwenBaseURL)
@@ -8075,7 +8076,7 @@ func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, paylo
 	}
 	firstEventTimeout := streamTimeoutDuration(c.settings.UpstreamStreamFirstEventTimeoutSeconds)
 	idleTimeout := streamTimeoutDuration(c.settings.UpstreamStreamIdleTimeoutSeconds)
-	logInfo(c.logger, ctx, "上游流式连接建立", "chat_id", chatID, "upstream_request_id", upstreamRequestID, "status", resp.StatusCode, "first_event_timeout_seconds", int(firstEventTimeout/time.Second), "idle_timeout_seconds", int(idleTimeout/time.Second))
+	logInfo(c.logger, ctx, "上游流式连接建立", "chat_id", chatID, "upstream_request_id", upstreamRequestID, "status", resp.StatusCode, "content_type", resp.Header.Get("Content-Type"), "first_event_timeout_seconds", int(firstEventTimeout/time.Second), "idle_timeout_seconds", int(idleTimeout/time.Second))
 	reader := bufio.NewReader(resp.Body)
 	lineReads := make(chan streamLineRead, 1)
 	go func() {
