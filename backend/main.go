@@ -4456,7 +4456,7 @@ func (app *App) classifyAccountErrorFor(acc *Account, err error, usage string) {
 	msg := err.Error()
 	lower := strings.ToLower(msg)
 	// Baxia WAF captcha block: use longer cooldown (5 minutes)
-	if strings.Contains(lower, "baxia_captcha_block") {
+	if strings.Contains(lower, "baxia_captcha_block") || strings.Contains(lower, "possible waf block") {
 		usage = normalizeAccountUsage(usage)
 		cooldown := 300 // 5 minutes
 		app.accounts.MarkRateLimitedFor(acc, usage, cooldown, msg)
@@ -4587,7 +4587,8 @@ func isBaxiaBlockError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "baxia_captcha_block")
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "baxia_captcha_block") || strings.Contains(lower, "possible waf block")
 }
 
 func isRetryableCreateChatError(err error) bool {
@@ -8569,6 +8570,11 @@ func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, paylo
 					if events == 0 {
 						if upstreamError := upstream.ExtractUpstreamError(rawTail); upstreamError != "" {
 							return errors.New(upstreamError)
+						}
+						// No events and no recognized error: if we received bytes, treat as upstream error
+						if totalBytes > 0 {
+							logWarn(c.logger, ctx, "上游 SSE 未解析到有效 delta，返回上游空响应错误", "chat_id", chatID, "stream_bytes", totalBytes, "raw_tail", truncate(rawTail, 500))
+							return fmt.Errorf("upstream returned %d bytes with 0 SSE events (possible WAF block): %s", totalBytes, truncate(rawTail, 200))
 						}
 						logWarn(c.logger, ctx, "上游 SSE 未解析到有效 delta", "chat_id", chatID, "stream_bytes", totalBytes, "raw_tail", truncate(rawTail, 500))
 					}
