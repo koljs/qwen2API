@@ -2657,6 +2657,10 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 		return nil
 	}
 	isMediaChat := req.ChatType == "t2i" || req.ChatType == "image_gen" || req.ChatType == "t2v"
+	if isMediaChat && req.ToolEnabled {
+		app.logInfo(ctx, "[MediaChat] 媒体模式保留原始chat_type", "chat_type", req.ChatType, "model_mode", req.ModelMode, "tool_enabled", req.ToolEnabled)
+	}
+	mediaImageCount := 0
 	err = app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
 		result.Events = append(result.Events, evt)
 		// For image/video generation, extract URLs from extra.image_list when content is empty
@@ -2665,6 +2669,7 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 				for _, item := range il {
 					if m, ok := item.(map[string]any); ok {
 						if imgURL, ok := m["image"].(string); ok && imgURL != "" {
+							mediaImageCount++
 							_ = streamContent(false, "![image]("+imgURL+")\n")
 						}
 					}
@@ -2734,6 +2739,9 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 	}
 	app.accounts.MarkSuccess(acc)
 	app.logInfo(ctx, "上游流式完成", "events", len(result.Events), "answer_len", len(result.AnswerText), "reasoning_len", len(result.ReasoningText), "duration_ms", time.Since(start).Milliseconds())
+	if isMediaChat && mediaImageCount > 0 {
+		app.logInfo(ctx, "[MediaChat] 图片URL提取完成", "image_count", mediaImageCount, "answer_len", len(result.AnswerText))
+	}
 	if result.AnswerText != "" || result.ReasoningText != "" {
 		app.logInfo(ctx, "上游回复摘要", "answer_tail", promptTail(result.AnswerText, 600), "reasoning_tail", promptTail(result.ReasoningText, 300))
 	}
@@ -7030,7 +7038,7 @@ func buildChatStandardRequest(body map[string]any, defaultModel, surface string)
 		Tools:                     req.Tools,
 		ToolNames:                 req.ToolNames,
 		ToolEnabled:               req.ToolEnabled,
-		ChatType:                  overrideChatTypeForTools(mode.ChatType, req.ToolEnabled),
+		ChatType:                  overrideChatTypeForTools(mode.ChatType, req.ToolEnabled, mode.Mode),
 		ThinkingEnabled:           thinking,
 		ForceThinking:             mode.ForceThinking,
 		EnableSearch:              req.EnableSearch,
@@ -7042,12 +7050,17 @@ func buildChatStandardRequest(body map[string]any, defaultModel, surface string)
 	}
 }
 
-// overrideChatTypeForTools forces chat_type to "t2t" when tools are enabled.
-// When a client like Operit sends tools (e.g. openai_draw), the model should
-// use tool calls to generate images, not the native t2i/t2v chat mode which
-// returns image URLs in extra.image_list instead of tool_calls.
-func overrideChatTypeForTools(chatType string, toolEnabled bool) string {
+// overrideChatTypeForTools forces chat_type to "t2t" when tools are enabled,
+// EXCEPT when model_mode is "image" or "video" — in those cases the original
+// chat_type (t2i/t2v) must be preserved so the upstream can generate images/videos.
+// When a client like Operit sends tools with an image model, the image generation
+// is more important than tool calling; the t2i/t2v chat_type returns image URLs in
+// extra.image_list which we extract and return as text content.
+func overrideChatTypeForTools(chatType string, toolEnabled bool, modelMode string) string {
 	if toolEnabled && (chatType == "t2i" || chatType == "image_gen" || chatType == "t2v") {
+		if modelMode == "image" || modelMode == "video" {
+			return chatType
+		}
 		return "t2t"
 	}
 	return chatType
