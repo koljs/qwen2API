@@ -2621,6 +2621,23 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 	if preferredEmail == "" {
 		preferredEmail = req.PreferredEmail
 	}
+	// Try up to 3 accounts when Baxia WAF blocks the current one
+	maxBaxiaRetries := 3
+	for baxiaAttempt := 0; baxiaAttempt < maxBaxiaRetries; baxiaAttempt++ {
+		result, err := app.runCompletionWithHooksInner(ctx, req, preferredEmail, hooks)
+		if err != nil && isBaxiaBlockError(err) && req.BoundAccount == nil && baxiaAttempt < maxBaxiaRetries-1 {
+			app.logWarn(ctx, "[BaxiaRetry] 账号被Baxia拦截，切换账号重试", "attempt", baxiaAttempt+1, "max_attempts", maxBaxiaRetries, "error", truncate(err.Error(), 200))
+			// The failed account is already cooled by classifyAccountError.
+			// Clear preferredEmail so the next attempt picks a different account.
+			preferredEmail = ""
+			continue
+		}
+		return result, err
+	}
+	return CompletionResult{}, nil
+}
+
+func (app *App) runCompletionWithHooksInner(ctx context.Context, req StandardRequest, preferredEmail string, hooks *completionStreamHooks) (CompletionResult, error) {
 	acc, chatID, reused, err := app.acquireCompletionChat(ctx, req, preferredEmail)
 	if err != nil {
 		return CompletionResult{}, err
@@ -4374,6 +4391,16 @@ func (app *App) classifyAccountErrorFor(acc *Account, err error, usage string) {
 	}
 	msg := err.Error()
 	lower := strings.ToLower(msg)
+	// Baxia WAF captcha block: use longer cooldown (5 minutes)
+	if strings.Contains(lower, "baxia_captcha_block") || strings.Contains(lower, "possible waf block") {
+		usage = normalizeAccountUsage(usage)
+		cooldown := 300 // 5 minutes
+		app.accounts.MarkRateLimitedFor(acc, usage, cooldown, msg)
+		if app.logger != nil {
+			app.logger.Warn("账号被Baxia验证码拦截，进入长冷却", "account", acc.Email, "usage", usage, "cooldown_seconds", cooldown, "error", truncate(msg, 240))
+		}
+		return
+	}
 	if isRateLimitErrorMessage(lower) {
 		usage = normalizeAccountUsage(usage)
 		app.accounts.MarkRateLimitedFor(acc, usage, app.accountErrorCooldown(lower), msg)
@@ -4490,6 +4517,14 @@ func isAuthErrorMessage(lower string) bool {
 		}
 	}
 	return false
+}
+
+func isBaxiaBlockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "baxia_captcha_block") || strings.Contains(lower, "possible waf block")
 }
 
 func isRetryableCreateChatError(err error) bool {
@@ -8172,6 +8207,11 @@ func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, paylo
 					if events == 0 {
 						if upstreamError := upstream.ExtractUpstreamError(rawTail); upstreamError != "" {
 							return errors.New(upstreamError)
+						}
+						// No events and no recognized error: if we received bytes, treat as upstream error
+						if totalBytes > 0 {
+							logWarn(c.logger, ctx, "上游 SSE 未解析到有效 delta，返回上游空响应错误", "chat_id", chatID, "stream_bytes", totalBytes, "raw_tail", truncate(rawTail, 500))
+							return fmt.Errorf("upstream returned %d bytes with 0 SSE events (possible WAF block): %s", totalBytes, truncate(rawTail, 200))
 						}
 						logWarn(c.logger, ctx, "上游 SSE 未解析到有效 delta", "chat_id", chatID, "stream_bytes", totalBytes, "raw_tail", truncate(rawTail, 500))
 					}
