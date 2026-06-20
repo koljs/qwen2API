@@ -7030,7 +7030,7 @@ func buildChatStandardRequest(body map[string]any, defaultModel, surface string)
 		Tools:                     req.Tools,
 		ToolNames:                 req.ToolNames,
 		ToolEnabled:               req.ToolEnabled,
-		ChatType:                  mode.ChatType,
+		ChatType:                  overrideChatTypeForTools(mode.ChatType, req.ToolEnabled),
 		ThinkingEnabled:           thinking,
 		ForceThinking:             mode.ForceThinking,
 		EnableSearch:              req.EnableSearch,
@@ -7040,6 +7040,17 @@ func buildChatStandardRequest(body map[string]any, defaultModel, surface string)
 		RepeatedToolCount:         req.RepeatedToolCount,
 		LatestMessageIsToolResult: req.LatestMessageIsToolResult,
 	}
+}
+
+// overrideChatTypeForTools forces chat_type to "t2t" when tools are enabled.
+// When a client like Operit sends tools (e.g. openai_draw), the model should
+// use tool calls to generate images, not the native t2i/t2v chat mode which
+// returns image URLs in extra.image_list instead of tool_calls.
+func overrideChatTypeForTools(chatType string, toolEnabled bool) string {
+	if toolEnabled && (chatType == "t2i" || chatType == "image_gen" || chatType == "t2v") {
+		return "t2t"
+	}
+	return chatType
 }
 
 func extractThinkingEnabled(body map[string]any) *bool {
