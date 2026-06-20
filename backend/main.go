@@ -5843,9 +5843,21 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			payload := buildChatPayload(chatID, model, promptText, false, nil, "image_gen", imageOptions, nil, false)
 			parts := []string{}
 			imageListURLs := []string{}
+			imageGenToolEvents := 0
 			if err := app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
 				if evt.Content != "" {
 					parts = append(parts, evt.Content)
+				}
+				// Debug: log image_gen_tool events to understand the SSE structure
+				if evt.Phase == "image_gen_tool" {
+					imageGenToolEvents++
+					if imageGenToolEvents <= 3 {
+						extraKeys := []string{}
+						for k := range evt.Extra {
+							extraKeys = append(extraKeys, k)
+						}
+						app.logInfo(ctx, "图片生成SSE事件调试", "attempt", attempt+1, "phase", evt.Phase, "status", evt.Status, "content_len", len(evt.Content), "extra_keys", strings.Join(extraKeys, ","), "raw_len", len(mustJSON(evt.Raw)))
+					}
 				}
 				// Extract image URLs from extra.image_list (Qwen's native image generation format)
 				if evt.Extra != nil {
@@ -5871,7 +5883,7 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			}
 
 			answerText := strings.Join(parts, "\n")
-			app.logInfo(ctx, "图片生成流式完成", "attempt", attempt+1, "parts", len(parts), "image_list_urls", len(imageListURLs), "answer_len", len(answerText), "answer_tail", promptTail(answerText, 300))
+			app.logInfo(ctx, "图片生成流式完成", "attempt", attempt+1, "parts", len(parts), "image_list_urls", len(imageListURLs), "image_gen_tool_events", imageGenToolEvents, "answer_len", len(answerText), "answer_tail", promptTail(answerText, 300))
 			if _, detail, err := app.client.GetChatDetail(ctx, acc.Token, chatID, 30*time.Second); err == nil && detail != "" {
 				answerText += "\n" + detail
 			}
