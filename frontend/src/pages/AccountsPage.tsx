@@ -367,6 +367,7 @@ export default function AccountsPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [token, setToken] = useState("")
+  const [cookies, setCookies] = useState("")
   const [verifying, setVerifying] = useState<string | null>(null)
   const [verifyingAll, setVerifyingAll] = useState(false)
   const [bulkText, setBulkText] = useState("")
@@ -478,6 +479,7 @@ export default function AccountsPage() {
       body: JSON.stringify({
         email: email || `manual_${Date.now()}@qwen`,
         password,
+        cookies,
         token,
       })
     }).then(readAdminJSON)
@@ -487,6 +489,7 @@ export default function AccountsPage() {
           setEmail("")
           setPassword("")
           setToken("")
+          setCookies("")
           fetchAccounts()
         } else {
           toast.error(localizeError(data.error) || "\u8d26\u53f7\u6ce8\u5165\u5931\u8d25", { id, duration: 8000 })
@@ -729,6 +732,7 @@ export default function AccountsPage() {
       toast.error("token 不能为空")
       return
     }
+    const nextCookies = window.prompt("编辑 Cookies（可留空，从浏览器开发者工具复制完整 Cookie 字符串）", acc.cookies || "")
     const id = toast.loading(`正在保存 ${acc.email}...`)
     const res = await fetch(`${API_BASE}/api/admin/accounts`, {
       method: "POST",
@@ -737,7 +741,7 @@ export default function AccountsPage() {
         email: nextEmail.trim() || acc.email,
         password: nextPassword,
         username: nextUsername,
-        cookies: acc.cookies || "",
+        cookies: nextCookies ?? acc.cookies ?? "",
         token: nextToken.trim(),
       }),
     }).catch(() => null)
@@ -845,8 +849,13 @@ export default function AccountsPage() {
               <input type="text" value={email} onChange={e => setEmail(e.target.value)} className="admin-input flex h-10 w-full px-3 py-2 text-sm" placeholder={"\u90ae\u7bb1\u5730\u5740"} />
             </div>
             <div>
-              <label className="text-xs font-semibold mb-1.5 block">{"\u5bc6\u7801\uff08\u9009\u586b\uff09"}</label>
-              <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="admin-input flex h-10 w-full px-3 py-2 text-sm" placeholder={"\u7528\u4e8e\u81ea\u52a8\u5237\u65b0\u6216\u6fc0\u6d3b"} />
+              <label className="text-xs font-semibold mb-1.5 block">{"密码（选填）"}</label>
+              <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="admin-input flex h-10 w-full px-3 py-2 text-sm" placeholder={"用于自动刷新或激活"} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs font-semibold mb-1.5 block">{"Cookies（选填，防 WAF 拦截）"}</label>
+              <input type="text" value={cookies} onChange={e => setCookies(e.target.value)} className="admin-input flex h-10 w-full px-3 py-2 text-sm" placeholder={"从浏览器 F12 → Application → Cookies 复制完整 Cookie 字符串"} />
+              <p className="text-xs text-muted-foreground mt-1">{"填写浏览器登录后的完整 Cookie 可避免被阿里云 WAF 拦截。在 chat.qwen.ai 按 F12 → Application → Cookies → 复制所有 cookie。"}</p>
             </div>
           </div>
           <Button onClick={handleAdd} variant="secondary" className="h-10 w-full font-semibold">
