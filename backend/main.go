@@ -6203,7 +6203,17 @@ func resolveMediaModel(requested string, image bool) string {
 		return v
 	}
 	mode := parseModelMode(requested, "qwen3.6-plus")
-	return resolveModel(mode.BaseModel)
+	resolved := resolveModel(mode.BaseModel)
+	// Only models known to support image/video generation are allowed;
+	// otherwise fall back to qwen3.6-plus which supports both t2i and t2v.
+	knownMediaModels := map[string]bool{
+		"qwen3.6-plus": true, "qwen3.7-plus": true, "qwen3.7-max": true,
+		"qwen3.5-plus": true, "qwen3.5-max": true, "qwen3.5-flash": true,
+	}
+	if !knownMediaModels[resolved] {
+		return "qwen3.6-plus"
+	}
+	return resolved
 }
 
 var (
