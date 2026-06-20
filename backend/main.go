@@ -5842,9 +5842,22 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 
 			payload := buildChatPayload(chatID, model, promptText, false, nil, "image_gen", imageOptions, nil, false)
 			parts := []string{}
+			imageListURLs := []string{}
 			if err := app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
 				if evt.Content != "" {
 					parts = append(parts, evt.Content)
+				}
+				// Extract image URLs from extra.image_list (Qwen's native image generation format)
+				if evt.Extra != nil {
+					if il, ok := evt.Extra["image_list"].([]any); ok {
+						for _, item := range il {
+							if m, ok := item.(map[string]any); ok {
+								if imgURL, ok := m["image"].(string); ok && imgURL != "" {
+									imageListURLs = append(imageListURLs, imgURL)
+								}
+							}
+						}
+					}
 				}
 				if evt.Raw != nil {
 					parts = append(parts, mustJSON(evt.Raw))
@@ -5858,6 +5871,7 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			}
 
 			answerText := strings.Join(parts, "\n")
+			app.logInfo(ctx, "图片生成流式完成", "attempt", attempt+1, "parts", len(parts), "image_list_urls", len(imageListURLs), "answer_len", len(answerText), "answer_tail", promptTail(answerText, 300))
 			if _, detail, err := app.client.GetChatDetail(ctx, acc.Token, chatID, 30*time.Second); err == nil && detail != "" {
 				answerText += "\n" + detail
 			}
@@ -5877,10 +5891,15 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			}
 
 			urls := extractImageURLs(answerText)
-			app.logInfo(ctx, "图片生成链接提取完成", "attempt", attempt+1, "url_count", len(urls), "answer_len", len(answerText))
+			// Prefer image_list URLs from SSE extra fields (Qwen's native format)
+			if len(imageListURLs) > 0 {
+				urls = append(imageListURLs, urls...)
+			}
+			urls = dedupeStrings(urls)
+			app.logInfo(ctx, "图片生成链接提取完成", "attempt", attempt+1, "url_count", len(urls), "image_list_count", len(imageListURLs), "answer_len", len(answerText))
 			if len(urls) == 0 {
 				lastErr = fmt.Errorf("Image generation produced no image URL (chat_id=%s)", chatID)
-				app.logWarn(ctx, "图片生成未识别到图片链接", "attempt", attempt+1, "answer_tail", promptTail(answerText, 240))
+				app.logWarn(ctx, "图片生成未识别到图片链接", "attempt", attempt+1, "answer_tail", promptTail(answerText, 500), "image_list_count", len(imageListURLs))
 				return
 			}
 			app.accounts.MarkSuccessFor(acc, accountUsageImage)
@@ -8040,7 +8059,11 @@ func (c *QwenClient) CreateChat(ctx context.Context, token, model, chatType stri
 		chatType = "t2t"
 	}
 	ts := time.Now().Unix()
-	body := map[string]any{"title": fmt.Sprintf("api_%d", ts), "models": []string{model}, "chat_mode": "normal", "chat_type": normalizeUpstreamChatType(chatType), "timestamp": ts}
+	chatMode := "normal"
+	if chatType == "image_gen" || chatType == "t2i" || chatType == "t2v" {
+		chatMode = "local"
+	}
+	body := map[string]any{"title": fmt.Sprintf("api_%d", ts), "models": []string{model}, "chat_mode": chatMode, "chat_type": normalizeUpstreamChatType(chatType), "timestamp": ts}
 	logInfo(c.logger, ctx, "开始创建上游会话", "model", model, "chat_type", chatType, "token", redactToken(token))
 	status, text, err := c.requestJSON(ctx, http.MethodPost, "/api/v2/chats/new", token, body, 30*time.Second)
 	if err != nil {
