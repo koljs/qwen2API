@@ -2661,11 +2661,53 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 		app.logInfo(ctx, "[MediaChat] 媒体模式保留原始chat_type", "chat_type", req.ChatType, "model_mode", req.ModelMode, "tool_enabled", req.ToolEnabled)
 	}
 	mediaImageCount := 0
+	mediaDebugCount := 0
 	err = app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
 		result.Events = append(result.Events, evt)
+		// Debug: log media events to understand SSE structure
+		if isMediaChat {
+			mediaDebugCount++
+			if mediaDebugCount <= 5 || (evt.Extra != nil && len(evt.Extra) > 0) {
+				extraKeys := []string{}
+				for k := range evt.Extra {
+					extraKeys = append(extraKeys, k)
+				}
+				rawKeys := []string{}
+				for k := range evt.Raw {
+					rawKeys = append(rawKeys, k)
+				}
+				app.logInfo(ctx, "[MediaChat] SSE事件", "idx", mediaDebugCount, "type", evt.Type, "phase", evt.Phase, "status", evt.Status, "content_len", len(evt.Content), "extra_keys", strings.Join(extraKeys, ","), "raw_keys", strings.Join(rawKeys, ","))
+			}
+		}
 		// For image/video generation, extract URLs from extra.image_list when content is empty
 		if isMediaChat && evt.Extra != nil {
 			if il, ok := evt.Extra["image_list"].([]any); ok {
+				for _, item := range il {
+					if m, ok := item.(map[string]any); ok {
+						if imgURL, ok := m["image"].(string); ok && imgURL != "" {
+							mediaImageCount++
+							_ = streamContent(false, "![image]("+imgURL+")\n")
+						}
+					}
+				}
+			}
+		}
+		// Also try extracting image_list from Raw (Qwen may put it outside delta)
+		if isMediaChat && evt.Raw != nil {
+			if data, ok := evt.Raw["data"].(map[string]any); ok {
+				if il, ok := data["image_list"].([]any); ok {
+					for _, item := range il {
+						if m, ok := item.(map[string]any); ok {
+							if imgURL, ok := m["image"].(string); ok && imgURL != "" {
+								mediaImageCount++
+								_ = streamContent(false, "![image]("+imgURL+")\n")
+							}
+						}
+					}
+				}
+			}
+			// Check top-level image_list
+			if il, ok := evt.Raw["image_list"].([]any); ok {
 				for _, item := range il {
 					if m, ok := item.(map[string]any); ok {
 						if imgURL, ok := m["image"].(string); ok && imgURL != "" {
@@ -4708,6 +4750,15 @@ func (app *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	app.recordStandardRequest(r.Context(), req)
 	id := "chatcmpl-" + randomID()[:12]
 	created := time.Now().Unix()
+
+	// When model_mode is image/video, use the dedicated media generation pipeline
+	// instead of the chat completion path. The chat completion path sends tools
+	// which confuses Qwen's t2i/t2v mode and prevents actual image generation.
+	if req.ModelMode == "image" || req.ModelMode == "video" {
+		app.handleChatCompletionMedia(w, r, req, id, created)
+		return
+	}
+
 	if req.Stream {
 		app.streamOpenAI(w, r, req, id, created)
 		return
@@ -4718,6 +4769,97 @@ func (app *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, buildOpenAICompletionPayload(id, created, req, result))
+}
+
+// handleChatCompletionMedia handles chat completion requests for image/video models
+// by redirecting to the dedicated media generation pipeline. The normal chat completion
+// path sends tools which confuses Qwen's t2i/t2v mode and prevents actual generation.
+func (app *App) handleChatCompletionMedia(w http.ResponseWriter, r *http.Request, req StandardRequest, id string, created int64) {
+	isVideo := req.ModelMode == "video"
+	// Extract the latest user message as the media generation prompt
+	prompt := extractLatestUserMessage(req.Prompt)
+	if prompt == "" {
+		prompt = req.Prompt
+	}
+
+	app.logInfo(r.Context(), "[MediaRedirect] 媒体请求重定向到专用管道", "model_mode", req.ModelMode, "resolved_model", req.ResolvedModel, "prompt_len", len(prompt), "stream", req.Stream, "is_video", isVideo)
+
+	var resultText string
+	var mediaErr error
+
+	if isVideo {
+		urls, err := app.createVideoURLs(r.Context(), req.ResolvedModel, prompt, nil)
+		if err != nil {
+			mediaErr = err
+		} else {
+			for _, url := range urls {
+				resultText += "![video](" + url + ")\n"
+			}
+		}
+	} else {
+		urls, err := app.createImageURLs(r.Context(), req.ResolvedModel, prompt, nil)
+		if err != nil {
+			mediaErr = err
+		} else {
+			for _, url := range urls {
+				resultText += "![image](" + url + ")\n"
+			}
+		}
+	}
+
+	if mediaErr != nil {
+		app.logWarn(r.Context(), "[MediaRedirect] 媒体生成失败", "error", mediaErr)
+		resultText = "Media generation failed: " + mediaErr.Error()
+	}
+
+	if resultText == "" {
+		resultText = "Media generation produced no output."
+	}
+
+	app.logInfo(r.Context(), "[MediaRedirect] 媒体生成完成", "result_len", len(resultText), "is_video", isVideo)
+
+	if req.Stream {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Accel-Buffering", "no")
+		flusher, _ := w.(http.Flusher)
+		_, _ = w.Write([]byte(openAIChunk(id, created, req.ResponseModel, map[string]any{"role": "assistant"}, nil)))
+		_, _ = w.Write([]byte(openAIChunk(id, created, req.ResponseModel, map[string]any{"content": resultText}, nil)))
+		_, _ = w.Write([]byte(openAIChunk(id, created, req.ResponseModel, map[string]any{}, "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
+
+	// Non-streaming response
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": id, "object": "chat.completion", "created": created, "model": req.ResponseModel,
+		"choices": []map[string]any{{"index": 0, "message": map[string]any{"role": "assistant", "content": resultText}, "finish_reason": "stop"}},
+		"usage": map[string]any{
+			"prompt_tokens": len(req.Prompt), "completion_tokens": len(resultText),
+			"total_tokens": len(req.Prompt) + len(resultText),
+		},
+	})
+}
+
+// extractLatestUserMessage extracts the last user message from the prompt text.
+// The prompt is formatted as "[User]\n<message>" blocks.
+func extractLatestUserMessage(prompt string) string {
+	// Find the last [User] block
+	idx := strings.LastIndex(prompt, "[User]\n")
+	if idx < 0 {
+		return ""
+	}
+	text := prompt[idx+len("[User]\n"):]
+	// Trim any trailing [Assistant] or other blocks
+	for _, marker := range []string{"\n[Assistant]", "\n[System]", "\n[Tool Result]", "\n[User]"} {
+		if i := strings.Index(text, marker); i >= 0 {
+			text = text[:i]
+		}
+	}
+	return strings.TrimSpace(text)
 }
 
 func (app *App) streamOpenAI(w http.ResponseWriter, r *http.Request, req StandardRequest, id string, created int64) {
