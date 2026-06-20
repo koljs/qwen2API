@@ -11,21 +11,27 @@ func canonicalToolName(name string, allowed map[string]string) string {
 	if name == "" {
 		return ""
 	}
+	// Try exact match first
 	if exact, ok := allowed[strings.ToLower(name)]; ok {
 		return exact
 	}
-	if alias := qwenToolAlias(name); alias != "" {
-		if exact, ok := allowed[strings.ToLower(alias)]; ok {
+	// Try all Qwen alias candidates (primary + alternatives for different IDEs)
+	for _, candidate := range qwenToolAliasCandidates(name) {
+		if exact, ok := allowed[strings.ToLower(candidate)]; ok {
 			return exact
 		}
 	}
+	// Fallback: try key-based matching
 	key := toolAliasKey(name)
 	for allowedKey, canonical := range allowed {
 		if toolAliasKey(allowedKey) == key || toolAliasKey(canonical) == key {
 			return canonical
 		}
-		if alias := qwenToolAlias(canonical); alias != "" && toolAliasKey(alias) == key {
-			return canonical
+		// Also try matching via alias candidates
+		for _, candidate := range qwenToolAliasCandidates(canonical) {
+			if toolAliasKey(candidate) == key {
+				return canonical
+			}
 		}
 	}
 	return ""
@@ -40,21 +46,33 @@ func qwenToolAlias(name string) string {
 	if trimmed == "" {
 		return ""
 	}
+	// Map Qwen tool aliases to their canonical IDE tool names.
+	// For tools that have different names across IDEs (e.g. Bash vs RunCommand),
+	// we return the most common alias; canonicalToolName will try all candidates.
 	explicit := map[string]string{
-		"fs_open_file":   "Read",
-		"fs_put_file":    "Write",
-		"fs_patch_file":  "Edit",
-		"shell_run":      "Bash",
-		"text_search":    "Grep",
-		"path_find":      "Glob",
-		"notebook_patch": "NotebookEdit",
-		"http_get_url":   "WebFetch",
-		"web_query":      "WebSearch",
-		"task_update":    "TodoWrite",
-		"ask_user":       "AskUserQuestion",
-		"skill_invoke":   "Skill",
-		"task_create":    "Task",
-		"cron_create":    "Schedule",
+		"fs_open_file":        "Read",
+		"fs_put_file":         "Write",
+		"fs_patch_file":       "Edit",
+		"fs_delete_file":      "DeleteFile",
+		"shell_run":           "RunCommand",
+		"check_command_status": "CheckCommandStatus",
+		"stop_command":        "StopCommand",
+		"text_search":         "Grep",
+		"path_find":           "LS",
+		"codebase_search":     "SearchCodebase",
+		"notebook_patch":      "NotebookEdit",
+		"http_get_url":        "WebFetch",
+		"web_query":           "WebSearch",
+		"task_update":         "TodoWrite",
+		"ask_user":            "AskUserQuestion",
+		"skill_invoke":        "Skill",
+		"delegate_task":       "Task",
+		"invoke_skill":        "Skill",
+		"task_create":         "Task",
+		"cron_create":         "Schedule",
+		"schedule_task":       "Schedule",
+		"notify_user":         "NotifyUser",
+		"open_preview":        "OpenPreview",
 	}
 	lowered := strings.ToLower(trimmed)
 	if mapped, ok := explicit[lowered]; ok {
@@ -70,6 +88,33 @@ func qwenToolAlias(name string) string {
 		return strings.TrimPrefix(trimmed, "u_")
 	}
 	return ""
+}
+
+// qwenToolAliasCandidates returns all possible canonical names for a Qwen tool alias.
+// This handles cases where different IDEs use different tool names for the same
+// underlying operation (e.g. Bash vs RunCommand, Glob vs LS).
+func qwenToolAliasCandidates(name string) []string {
+	candidates := []string{}
+	primary := qwenToolAlias(name)
+	if primary != "" {
+		candidates = append(candidates, primary)
+	}
+	// Add alternative IDE-specific names for the same tool
+	alternatives := map[string][]string{
+		"shell_run":      {"Bash", "RunCommand", "execute_command"},
+		"path_find":      {"Glob", "LS", "list_directory"},
+		"fs_patch_file":  {"Edit", "SearchReplace", "apply_patch"},
+		"fs_delete_file": {"DeleteFile", "rm"},
+	}
+	lowered := strings.ToLower(strings.TrimSpace(name))
+	if alts, ok := alternatives[lowered]; ok {
+		for _, alt := range alts {
+			if alt != primary {
+				candidates = append(candidates, alt)
+			}
+		}
+	}
+	return candidates
 }
 
 func parseToolInput(text string) any {

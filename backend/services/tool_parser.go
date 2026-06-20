@@ -124,13 +124,13 @@ func qwenSafeToolAlias(name string) string {
 		return "fs_open_file"
 	case "Write":
 		return "fs_put_file"
-	case "Edit":
+	case "Edit", "SearchReplace":
 		return "fs_patch_file"
-	case "Bash":
+	case "Bash", "RunCommand":
 		return "shell_run"
 	case "Grep":
 		return "text_search"
-	case "Glob":
+	case "Glob", "LS":
 		return "path_find"
 	case "NotebookEdit":
 		return "notebook_patch"
@@ -138,6 +138,28 @@ func qwenSafeToolAlias(name string) string {
 		return "http_get_url"
 	case "WebSearch":
 		return "web_query"
+	case "CheckCommandStatus":
+		return "check_command_status"
+	case "StopCommand":
+		return "stop_command"
+	case "DeleteFile":
+		return "fs_delete_file"
+	case "AskUserQuestion":
+		return "ask_user"
+	case "TodoWrite":
+		return "todo_write"
+	case "Schedule":
+		return "schedule_task"
+	case "NotifyUser":
+		return "notify_user"
+	case "OpenPreview":
+		return "open_preview"
+	case "Task":
+		return "delegate_task"
+	case "Skill":
+		return "invoke_skill"
+	case "SearchCodebase":
+		return "codebase_search"
 	default:
 		if strings.HasPrefix(name, "u_") {
 			return name
