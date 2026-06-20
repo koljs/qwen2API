@@ -8059,11 +8059,7 @@ func (c *QwenClient) CreateChat(ctx context.Context, token, model, chatType stri
 		chatType = "t2t"
 	}
 	ts := time.Now().Unix()
-	chatMode := "normal"
-	if chatType == "image_gen" || chatType == "t2i" || chatType == "t2v" {
-		chatMode = "local"
-	}
-	body := map[string]any{"title": fmt.Sprintf("api_%d", ts), "models": []string{model}, "chat_mode": chatMode, "chat_type": normalizeUpstreamChatType(chatType), "timestamp": ts}
+	body := map[string]any{"title": fmt.Sprintf("api_%d", ts), "models": []string{model}, "chat_mode": "normal", "chat_type": normalizeUpstreamChatType(chatType), "timestamp": ts}
 	logInfo(c.logger, ctx, "开始创建上游会话", "model", model, "chat_type", chatType, "token", redactToken(token))
 	status, text, err := c.requestJSON(ctx, http.MethodPost, "/api/v2/chats/new", token, body, 30*time.Second)
 	if err != nil {
