@@ -4791,7 +4791,7 @@ func (app *App) handleChatCompletionMedia(w http.ResponseWriter, r *http.Request
 	var mediaErr error
 
 	if isVideo {
-		urls, err := app.createVideoURLs(r.Context(), req.ResolvedModel, prompt, nil)
+		urls, err := app.createVideoURLs(r.Context(), req.ResolvedModel, prompt, map[string]any{})
 		if err != nil {
 			mediaErr = err
 		} else {
@@ -4800,7 +4800,7 @@ func (app *App) handleChatCompletionMedia(w http.ResponseWriter, r *http.Request
 			}
 		}
 	} else {
-		urls, err := app.createImageURLs(r.Context(), req.ResolvedModel, prompt, nil)
+		urls, err := app.createImageURLs(r.Context(), req.ResolvedModel, prompt, map[string]any{})
 		if err != nil {
 			mediaErr = err
 		} else {
