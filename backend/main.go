@@ -4776,13 +4776,16 @@ func (app *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 // path sends tools which confuses Qwen's t2i/t2v mode and prevents actual generation.
 func (app *App) handleChatCompletionMedia(w http.ResponseWriter, r *http.Request, req StandardRequest, id string, created int64) {
 	isVideo := req.ModelMode == "video"
-	// Extract the latest user message as the media generation prompt
-	prompt := extractLatestUserMessage(req.Prompt)
+	// Extract the latest user message from the original messages array
+	prompt := extractLatestUserMessageFromMessages(req.Messages)
+	if prompt == "" {
+		prompt = extractLatestUserMessage(req.Prompt)
+	}
 	if prompt == "" {
 		prompt = req.Prompt
 	}
 
-	app.logInfo(r.Context(), "[MediaRedirect] 媒体请求重定向到专用管道", "model_mode", req.ModelMode, "resolved_model", req.ResolvedModel, "prompt_len", len(prompt), "stream", req.Stream, "is_video", isVideo)
+	app.logInfo(r.Context(), "[MediaRedirect] 媒体请求重定向到专用管道", "model_mode", req.ModelMode, "resolved_model", req.ResolvedModel, "prompt_len", len(prompt), "full_prompt_len", len(req.Prompt), "stream", req.Stream, "is_video", isVideo)
 
 	var resultText string
 	var mediaErr error
@@ -4842,6 +4845,31 @@ func (app *App) handleChatCompletionMedia(w http.ResponseWriter, r *http.Request
 			"total_tokens": len(req.Prompt) + len(resultText),
 		},
 	})
+}
+
+// extractLatestUserMessageFromMessages extracts the last user message from the
+// original OpenAI messages array. This is more reliable than parsing the formatted
+// prompt string, especially when tools are present (messagesToToolPrompt format).
+func extractLatestUserMessageFromMessages(messages []any) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	// Walk backwards to find the last user message
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg, ok := messages[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := msg["role"].(string)
+		if role != "user" {
+			continue
+		}
+		text := extractContentText(msg["content"])
+		if strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
 }
 
 // extractLatestUserMessage extracts the last user message from the prompt text.
@@ -7123,6 +7151,7 @@ type StandardRequest struct {
 	UpstreamFiles   []map[string]any
 	PreferredEmail  string
 	BoundAccount    *Account
+	Messages        []any
 
 	RepeatedToolName          string
 	RepeatedToolSignature     string
@@ -7185,6 +7214,7 @@ func buildChatStandardRequest(body map[string]any, defaultModel, surface string)
 		ForceThinking:             mode.ForceThinking,
 		EnableSearch:              req.EnableSearch,
 		ModelMode:                 mode.Mode,
+		Messages:                  req.Messages,
 		RepeatedToolName:          req.RepeatedToolName,
 		RepeatedToolSignature:     req.RepeatedToolSignature,
 		RepeatedToolCount:         req.RepeatedToolCount,

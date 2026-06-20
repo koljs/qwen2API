@@ -47,6 +47,7 @@ type StandardRequest struct {
 	ForceThinking   bool
 	EnableSearch    bool
 	ModelMode       string
+	Messages        []any
 
 	RepeatedToolName          string
 	RepeatedToolSignature     string
@@ -97,6 +98,7 @@ func BuildChatStandardRequest(body map[string]any, defaultModel, surface string,
 		Surface: surface, Stream: boolValue(body["stream"]), Tools: tools, ToolNames: toolNames,
 		ToolEnabled: toolEnabled, ChatType: mode.ChatType, ThinkingEnabled: thinking,
 		ForceThinking: mode.ForceThinking, EnableSearch: enableSearch, ModelMode: mode.Mode,
+		Messages: messages,
 		RepeatedToolName: repeated.Name, RepeatedToolSignature: repeated.Signature, RepeatedToolCount: repeatedCount,
 		LatestMessageIsToolResult: latestMessageIsToolResult(messages),
 	}
