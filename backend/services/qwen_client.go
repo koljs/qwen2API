@@ -29,7 +29,7 @@ type TokenVerifyResult struct {
 	Message    string
 }
 
-func QwenHeaders(token string) http.Header {
+func QwenHeaders(token string, cookies string) http.Header {
 	headers := http.Header{}
 	headers.Set("Accept", "application/json, text/event-stream")
 	headers.Set("Content-Type", "application/json")
@@ -49,7 +49,7 @@ func QwenHeaders(token string) http.Header {
 		headers.Set("Authorization", "Bearer "+token)
 	}
 	// Baxia WAF headers
-	for k, v := range BaxiaHeaders(token) {
+	for k, v := range BaxiaHeaders(token, cookies) {
 		headers.Set(k, v)
 	}
 	return headers

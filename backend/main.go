@@ -1668,7 +1668,7 @@ func (p *ChatIDPool) Fill(ctx context.Context) {
 func (p *ChatIDPool) createWarmChat(ctx context.Context, acc Account, warmKey ModelWarmKey) {
 	fillCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	chatID, err := p.client.CreateChat(fillCtx, acc.Token, warmKey.Model, warmKey.ChatType)
+	chatID, err := p.client.CreateChat(fillCtx, acc.Token, acc.Cookies, warmKey.Model, warmKey.ChatType)
 	if err != nil {
 		logWarn(p.logger, ctx, "预热会话创建失败", "account", acc.Email, "model", warmKey.Model, "chat_type", warmKey.ChatType, "error", err)
 		return
@@ -2599,7 +2599,7 @@ func (app *App) acquireCompletionChat(ctx context.Context, req StandardRequest, 
 		if reused {
 			return acc, chatID, true, nil
 		}
-		chatID, err = app.client.CreateChat(ctx, acc.Token, req.ResolvedModel, req.ChatType)
+		chatID, err = app.client.CreateChat(ctx, acc.Token, acc.Cookies, req.ResolvedModel, req.ChatType)
 		if err == nil {
 			return acc, chatID, false, nil
 		}
@@ -2679,7 +2679,7 @@ func (app *App) runCompletionWithHooksInner(ctx context.Context, req StandardReq
 	}
 	mediaImageCount := 0
 	mediaDebugCount := 0
-	err = app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
+	err = app.client.StreamChat(ctx, acc.Token, acc.Cookies, chatID, payload, func(evt UpstreamEvent) error {
 		result.Events = append(result.Events, evt)
 		// Debug: log media events to understand SSE structure
 		if isMediaChat {
@@ -4153,7 +4153,7 @@ func isAcceptableNoToolContinuationText(req StandardRequest, result CompletionRe
 }
 
 func (app *App) runToolMarkupRecoveryAttempt(ctx context.Context, acc *Account, req StandardRequest, prompt, reason string) (CompletionResult, error) {
-	chatID, err := app.client.CreateChat(ctx, acc.Token, req.ResolvedModel, req.ChatType)
+	chatID, err := app.client.CreateChat(ctx, acc.Token, acc.Cookies, req.ResolvedModel, req.ChatType)
 	if err != nil {
 		app.classifyAccountError(acc, err)
 		return CompletionResult{}, err
@@ -4167,7 +4167,7 @@ func (app *App) runToolMarkupRecoveryAttempt(ctx context.Context, acc *Account, 
 	if req.ToolEnabled {
 		sieve = toolcall.NewToolSieve(req.Tools)
 	}
-	err = app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
+	err = app.client.StreamChat(ctx, acc.Token, acc.Cookies, chatID, payload, func(evt UpstreamEvent) error {
 		result.Events = append(result.Events, evt)
 		if evt.Type != "delta" || evt.Content == "" {
 			return nil
@@ -6057,7 +6057,7 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			setRequestLogFields(ctx, "account", acc.Email)
 			app.logInfo(ctx, "图片生成开始尝试", "attempt", attempt+1, "model", model)
 
-			chatID, err := app.client.CreateChat(ctx, acc.Token, model, "image_gen")
+			chatID, err := app.client.CreateChat(ctx, acc.Token, acc.Cookies, model, "image_gen")
 			if err != nil {
 				app.classifyAccountErrorFor(acc, err, accountUsageImage)
 				lastErr = err
@@ -6071,7 +6071,7 @@ func (app *App) createImageURLs(ctx context.Context, model, promptText string, i
 			parts := []string{}
 			imageListURLs := []string{}
 			imageGenToolEvents := 0
-			if err := app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
+			if err := app.client.StreamChat(ctx, acc.Token, acc.Cookies, chatID, payload, func(evt UpstreamEvent) error {
 				if evt.Content != "" {
 					parts = append(parts, evt.Content)
 				}
@@ -6221,7 +6221,7 @@ func (app *App) createVideoURLs(ctx context.Context, model, promptText string, v
 			defer app.accounts.Release(acc)
 			setRequestLogFields(ctx, "account", acc.Email)
 			app.logInfo(ctx, "视频生成开始尝试", "attempt", attempt+1, "model", model)
-			chatID, err = app.client.CreateChat(ctx, acc.Token, model, "t2v")
+			chatID, err = app.client.CreateChat(ctx, acc.Token, acc.Cookies, model, "t2v")
 			if err != nil {
 				app.classifyAccountErrorFor(acc, err, accountUsageVideo)
 				lastErr = err
@@ -6233,7 +6233,7 @@ func (app *App) createVideoURLs(ctx context.Context, model, promptText string, v
 
 			payload := buildChatPayload(chatID, model, promptText, false, nil, "t2v", videoOptions, nil, false)
 			payload["stream"] = false
-			status, body, err := app.client.PostChatCompletionOnce(ctx, acc.Token, chatID, payload, 90*time.Second)
+			status, body, err := app.client.PostChatCompletionOnce(ctx, acc.Token, acc.Cookies, chatID, payload, 90*time.Second)
 			if err != nil {
 				app.classifyAccountErrorFor(acc, err, accountUsageVideo)
 				lastErr = err
@@ -8304,7 +8304,7 @@ func NewQwenClient(pool *AccountPool, settings Settings, logger *slog.Logger) *Q
 	}
 }
 
-func qwenHeaders(token string) http.Header {
+func qwenHeaders(token string, cookies string) http.Header {
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+token)
 	h.Set("x-request-id", qwenRequestID())
@@ -8322,7 +8322,7 @@ func qwenHeaders(token string) http.Header {
 	h.Set("sec-fetch-mode", "cors")
 	h.Set("sec-fetch-site", "same-origin")
 	// Baxia WAF headers
-	for k, v := range services.BaxiaHeaders(token) {
+	for k, v := range services.BaxiaHeaders(token, cookies) {
 		h.Set(k, v)
 	}
 	return h
@@ -8342,7 +8342,7 @@ func qwenRequestID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-func (c *QwenClient) requestJSON(ctx context.Context, method, path, token string, body any, timeout time.Duration) (int, string, error) {
+func (c *QwenClient) requestJSON(ctx context.Context, method, path, token, cookies string, body any, timeout time.Duration) (int, string, error) {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -8360,7 +8360,7 @@ func (c *QwenClient) requestJSON(ctx context.Context, method, path, token string
 	if err != nil {
 		return 0, "", err
 	}
-	req.Header = qwenHeaders(token)
+	req.Header = qwenHeaders(token, cookies)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -8384,14 +8384,14 @@ func (c *QwenClient) requestJSON(ctx context.Context, method, path, token string
 	return resp.StatusCode, string(raw), nil
 }
 
-func (c *QwenClient) CreateChat(ctx context.Context, token, model, chatType string) (string, error) {
+func (c *QwenClient) CreateChat(ctx context.Context, token, cookies, model, chatType string) (string, error) {
 	if chatType == "" {
 		chatType = "t2t"
 	}
 	ts := time.Now().Unix()
 	body := map[string]any{"title": fmt.Sprintf("api_%d", ts), "models": []string{model}, "chat_mode": "normal", "chat_type": normalizeUpstreamChatType(chatType), "timestamp": ts}
 	logInfo(c.logger, ctx, "开始创建上游会话", "model", model, "chat_type", chatType, "token", redactToken(token))
-	status, text, err := c.requestJSON(ctx, http.MethodPost, "/api/v2/chats/new", token, body, 30*time.Second)
+	status, text, err := c.requestJSON(ctx, http.MethodPost, "/api/v2/chats/new", token, cookies, body, 30*time.Second)
 	if err != nil {
 		logWarn(c.logger, ctx, "创建上游会话请求失败", "model", model, "chat_type", chatType, "error", err)
 		return "", err
@@ -8430,7 +8430,7 @@ func (c *QwenClient) DeleteChat(ctx context.Context, token, chatID string) bool 
 	}
 	c.mu.Unlock()
 	for attempt := 1; attempt <= max(1, c.settings.ChatDeleteRetryAttempts); attempt++ {
-		status, text, err := c.requestJSON(ctx, http.MethodDelete, "/api/v2/chats/"+chatID, token, nil, 20*time.Second)
+		status, text, err := c.requestJSON(ctx, http.MethodDelete, "/api/v2/chats/"+chatID, token, "", nil, 20*time.Second)
 		if err == nil && (status == 200 || status == 204 || status == 404) {
 			c.mu.Lock()
 			c.deleted[chatID] = true
@@ -8444,7 +8444,7 @@ func (c *QwenClient) DeleteChat(ctx context.Context, token, chatID string) bool 
 	return false
 }
 
-func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, payload map[string]any, onEvent func(UpstreamEvent) error) error {
+func (c *QwenClient) StreamChat(ctx context.Context, token, cookies, chatID string, payload map[string]any, onEvent func(UpstreamEvent) error) error {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -8455,7 +8455,7 @@ func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, paylo
 	if err != nil {
 		return err
 	}
-	req.Header = qwenHeaders(token)
+	req.Header = qwenHeaders(token, cookies)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	upstreamRequestID := req.Header.Get("x-request-id")
@@ -8596,7 +8596,7 @@ func (c *QwenClient) StreamChat(ctx context.Context, token, chatID string, paylo
 	}
 }
 
-func (c *QwenClient) PostChatCompletionOnce(ctx context.Context, token, chatID string, payload map[string]any, timeout time.Duration) (int, string, error) {
+func (c *QwenClient) PostChatCompletionOnce(ctx context.Context, token, cookies, chatID string, payload map[string]any, timeout time.Duration) (int, string, error) {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -8610,7 +8610,7 @@ func (c *QwenClient) PostChatCompletionOnce(ctx context.Context, token, chatID s
 	if err != nil {
 		return 0, "", err
 	}
-	req.Header = qwenHeaders(token)
+	req.Header = qwenHeaders(token, cookies)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Accel-Buffering", "no")
 	logInfo(c.logger, ctx, "开始上游非流式请求", "chat_id", chatID, "token", redactToken(token), "payload_bytes", len(raw))
@@ -8634,12 +8634,12 @@ func (c *QwenClient) PostChatCompletionOnce(ctx context.Context, token, chatID s
 
 func (c *QwenClient) GetVisionTaskStatus(ctx context.Context, token, taskID string, timeout time.Duration) (int, string, error) {
 	logInfo(c.logger, ctx, "查询上游视觉任务", "task_id", taskID)
-	return c.requestJSON(ctx, http.MethodGet, "/api/v1/tasks/status/"+taskID, token, nil, timeout)
+	return c.requestJSON(ctx, http.MethodGet, "/api/v1/tasks/status/"+taskID, token, "", nil, timeout)
 }
 
 func (c *QwenClient) GetChatDetail(ctx context.Context, token, chatID string, timeout time.Duration) (int, string, error) {
 	logInfo(c.logger, ctx, "查询上游会话详情", "chat_id", chatID)
-	return c.requestJSON(ctx, http.MethodGet, "/api/v2/chats/"+chatID, token, nil, timeout)
+	return c.requestJSON(ctx, http.MethodGet, "/api/v2/chats/"+chatID, token, "", nil, timeout)
 }
 
 func (c *QwenClient) ListChats(ctx context.Context, token string, limit int) ([]map[string]any, error) {
@@ -8647,7 +8647,7 @@ func (c *QwenClient) ListChats(ctx context.Context, token string, limit int) ([]
 		limit = 50
 	}
 	logInfo(c.logger, ctx, "查询上游会话列表", "limit", limit)
-	status, text, err := c.requestJSON(ctx, http.MethodGet, fmt.Sprintf("/api/v2/chats?limit=%d", limit), token, nil, 20*time.Second)
+	status, text, err := c.requestJSON(ctx, http.MethodGet, fmt.Sprintf("/api/v2/chats?limit=%d", limit), token, "", nil, 20*time.Second)
 	if err != nil {
 		logWarn(c.logger, ctx, "查询上游会话列表失败", "limit", limit, "error", err)
 		return nil, err
@@ -8679,7 +8679,7 @@ func (c *QwenClient) ListModelsFromPool(ctx context.Context) ([]map[string]any, 
 	defer c.pool.Release(acc)
 	setRequestLogFields(ctx, "account", acc.Email)
 	logInfo(c.logger, ctx, "拉取上游模型", "account", acc.Email)
-	status, text, err := c.requestJSON(ctx, http.MethodGet, "/api/models", acc.Token, nil, 20*time.Second)
+	status, text, err := c.requestJSON(ctx, http.MethodGet, "/api/models", acc.Token, "", nil, 20*time.Second)
 	if err != nil || status != 200 {
 		if err != nil {
 			logWarn(c.logger, ctx, "拉取上游模型请求失败", "account", acc.Email, "error", err)
@@ -8709,7 +8709,7 @@ func (c *QwenClient) VerifyTokenDetail(ctx context.Context, token string) TokenV
 		return TokenVerifyResult{StatusCode: "auth_error", Error: "empty token"}
 	}
 	logInfo(c.logger, ctx, "开始账号 Token 验证", "token", redactToken(token))
-	status, text, err := c.requestJSON(ctx, http.MethodGet, "/api/v2/user/info", token, nil, 20*time.Second)
+	status, text, err := c.requestJSON(ctx, http.MethodGet, "/api/v2/user/info", token, "", nil, 20*time.Second)
 	if err != nil {
 		logWarn(c.logger, ctx, "账号 Token 验证请求失败", "token", redactToken(token), "error", err)
 		return TokenVerifyResult{StatusCode: "network_error", Error: err.Error()}

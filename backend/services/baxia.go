@@ -298,14 +298,34 @@ func generateSsxmodCookies() (itna, itna2 string) {
 
 // BaxiaHeaders returns the extra headers required by Baxia WAF.
 // The caller should merge these into the request headers.
-func BaxiaHeaders(token string) map[string]string {
+// If realCookies is non-empty, those browser-obtained cookies are used as the base,
+// with generated ssxmod cookies appended only if missing.
+func BaxiaHeaders(token string, realCookies string) map[string]string {
 	itna, itna2 := SsxmodCookies()
-	cookie := "token=" + token
-	if itna != "" {
-		cookie += ";ssxmod_itna=" + itna
-	}
-	if itna2 != "" {
-		cookie += ";ssxmod_itna2=" + itna2
+
+	// Build cookie string: prefer real browser cookies, add generated ssxmod if missing
+	cookie := ""
+	if realCookies != "" {
+		cookie = realCookies
+		// Ensure token is present
+		if !strings.Contains(cookie, "token=") {
+			cookie = "token=" + token + ";" + cookie
+		}
+		// Add generated ssxmod cookies only if not already present in real cookies
+		if itna != "" && !strings.Contains(cookie, "ssxmod_itna=") {
+			cookie += ";ssxmod_itna=" + itna
+		}
+		if itna2 != "" && !strings.Contains(cookie, "ssxmod_itna2=") {
+			cookie += ";ssxmod_itna2=" + itna2
+		}
+	} else {
+		cookie = "token=" + token
+		if itna != "" {
+			cookie += ";ssxmod_itna=" + itna
+		}
+		if itna2 != "" {
+			cookie += ";ssxmod_itna2=" + itna2
+		}
 	}
 
 	// Baxia WAF expects China Standard Time format, force CST regardless of server timezone
