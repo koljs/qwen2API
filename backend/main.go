@@ -2656,8 +2656,21 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 		}
 		return nil
 	}
+	isMediaChat := req.ChatType == "t2i" || req.ChatType == "image_gen" || req.ChatType == "t2v"
 	err = app.client.StreamChat(ctx, acc.Token, chatID, payload, func(evt UpstreamEvent) error {
 		result.Events = append(result.Events, evt)
+		// For image/video generation, extract URLs from extra.image_list when content is empty
+		if isMediaChat && evt.Extra != nil {
+			if il, ok := evt.Extra["image_list"].([]any); ok {
+				for _, item := range il {
+					if m, ok := item.(map[string]any); ok {
+						if imgURL, ok := m["image"].(string); ok && imgURL != "" {
+							_ = streamContent(false, "![image]("+imgURL+")\n")
+						}
+					}
+				}
+			}
+		}
 		if evt.Type != "delta" || evt.Content == "" {
 			return nil
 		}
