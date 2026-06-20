@@ -48,6 +48,16 @@ func FormatUpstreamError(obj map[string]any) string {
 	if obj == nil {
 		return ""
 	}
+	// Check for Baxia WAF captcha block: {"ret":["FAIL_SYS_USER_VALIDATE","RGV587_ERROR::SM::..."], "data":{...}}
+	if retArr, ok := obj["ret"].([]any); ok && len(retArr) > 0 {
+		for _, item := range retArr {
+			if s, ok := item.(string); ok {
+				if strings.HasPrefix(s, "FAIL_SYS_USER_VALIDATE") || strings.HasPrefix(s, "RGV587_ERROR") {
+					return "Qwen upstream error code=baxia_captcha_block details=账号被Baxia验证码拦截，请稍后重试或更换账号"
+				}
+			}
+		}
+	}
 	requestID := firstString(obj["request_id"], obj["response_id"])
 	if requestID == "" {
 		requestID = "-"

@@ -2622,6 +2622,23 @@ func (app *App) runCompletionWithHooks(ctx context.Context, req StandardRequest,
 	if preferredEmail == "" {
 		preferredEmail = req.PreferredEmail
 	}
+	// Try up to 3 accounts when Baxia WAF blocks the current one
+	maxBaxiaRetries := 3
+	for baxiaAttempt := 0; baxiaAttempt < maxBaxiaRetries; baxiaAttempt++ {
+		result, err := app.runCompletionWithHooksInner(ctx, req, preferredEmail, hooks)
+		if err != nil && isBaxiaBlockError(err) && req.BoundAccount == nil && baxiaAttempt < maxBaxiaRetries-1 {
+			app.logWarn(ctx, "[BaxiaRetry] 账号被Baxia拦截，切换账号重试", "attempt", baxiaAttempt+1, "max_attempts", maxBaxiaRetries, "error", truncate(err.Error(), 200))
+			// The failed account is already cooled by classifyAccountError.
+			// Clear preferredEmail so the next attempt picks a different account.
+			preferredEmail = ""
+			continue
+		}
+		return result, err
+	}
+	return CompletionResult{}, nil
+}
+
+func (app *App) runCompletionWithHooksInner(ctx context.Context, req StandardRequest, preferredEmail string, hooks *completionStreamHooks) (CompletionResult, error) {
 	acc, chatID, reused, err := app.acquireCompletionChat(ctx, req, preferredEmail)
 	if err != nil {
 		return CompletionResult{}, err
@@ -4438,6 +4455,16 @@ func (app *App) classifyAccountErrorFor(acc *Account, err error, usage string) {
 	}
 	msg := err.Error()
 	lower := strings.ToLower(msg)
+	// Baxia WAF captcha block: use longer cooldown (5 minutes)
+	if strings.Contains(lower, "baxia_captcha_block") {
+		usage = normalizeAccountUsage(usage)
+		cooldown := 300 // 5 minutes
+		app.accounts.MarkRateLimitedFor(acc, usage, cooldown, msg)
+		if app.logger != nil {
+			app.logger.Warn("账号被Baxia验证码拦截，进入长冷却", "account", acc.Email, "usage", usage, "cooldown_seconds", cooldown, "error", truncate(msg, 240))
+		}
+		return
+	}
 	if isRateLimitErrorMessage(lower) {
 		usage = normalizeAccountUsage(usage)
 		app.accounts.MarkRateLimitedFor(acc, usage, app.accountErrorCooldown(lower), msg)
@@ -4554,6 +4581,13 @@ func isAuthErrorMessage(lower string) bool {
 		}
 	}
 	return false
+}
+
+func isBaxiaBlockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "baxia_captcha_block")
 }
 
 func isRetryableCreateChatError(err error) bool {
