@@ -4751,10 +4751,11 @@ func (app *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	id := "chatcmpl-" + randomID()[:12]
 	created := time.Now().Unix()
 
-	// When model_mode is image/video, use the dedicated media generation pipeline
-	// instead of the chat completion path. The chat completion path sends tools
-	// which confuses Qwen's t2i/t2v mode and prevents actual image generation.
-	if req.ModelMode == "image" || req.ModelMode == "video" {
+	// When model_mode is image/video AND no tools are present, use the dedicated
+	// media generation pipeline instead of the chat completion path.
+	// If tools are present (e.g. from TRAE/Operit), the request should go through
+	// the normal chat completion path so the model can use tool calls.
+	if (req.ModelMode == "image" || req.ModelMode == "video") && !req.ToolEnabled {
 		app.handleChatCompletionMedia(w, r, req, id, created)
 		return
 	}
