@@ -4,6 +4,18 @@ import { Button } from "../components/ui/button"
 import { toast } from "sonner"
 import { getAuthHeader } from "../lib/auth"
 import { API_BASE } from "../lib/api"
+
+/** Proxy CDN URLs through the backend to bypass Referer-based hotlink protection */
+function proxyUrl(url: string): string {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    if (u.hostname.endsWith(".alicdn.com") || u.hostname.endsWith(".qwenlm.ai") || u.hostname === "chat.qwen.ai") {
+      return `${API_BASE}/api/media/proxy?url=${encodeURIComponent(url)}`
+    }
+  } catch { /* not a valid URL, return as-is */ }
+  return url
+}
 import {
   FALLBACK_VIDEO_MODELS,
   chooseDefaultModel,
@@ -305,16 +317,16 @@ export default function VideoPage() {
               <div key={`${video.url}-${idx}`} className="admin-card overflow-hidden group">
                 <div className="relative bg-muted/30">
                   <video
-                    src={video.url}
+                    src={proxyUrl(video.url)}
                     controls
                     className="w-full aspect-video bg-black object-contain"
                     preload="metadata"
                   />
                   <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button size="sm" variant="secondary" onClick={() => handleDownload(video.url, idx)} className="gap-1.5">
+                    <Button size="sm" variant="secondary" onClick={() => handleDownload(proxyUrl(video.url), idx)} className="gap-1.5">
                       <Download className="h-3.5 w-3.5" /> 下载
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => window.open(video.url, "_blank")}>
+                    <Button size="sm" variant="secondary" onClick={() => window.open(proxyUrl(video.url), "_blank")}>
                       打开
                     </Button>
                   </div>

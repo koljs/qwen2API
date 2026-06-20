@@ -2404,6 +2404,7 @@ func (app *App) routes() http.Handler {
 	mux.HandleFunc("POST /images/generations", app.handleImages)
 	mux.HandleFunc("POST /v1/videos/generations", app.handleVideos)
 	mux.HandleFunc("POST /videos/generations", app.handleVideos)
+	mux.HandleFunc("GET /api/media/proxy", app.handleMediaProxy)
 	mux.HandleFunc("POST /v1/files", app.handleUploadFile)
 	mux.HandleFunc("POST /api/files/upload", app.handleUploadFile)
 	mux.HandleFunc("DELETE /v1/files/{file_id}", app.handleDeleteFile)
@@ -6062,6 +6063,54 @@ func upstreamMediaErrorStatus(err error) int {
 		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError
+}
+
+// handleMediaProxy proxies CDN media requests to bypass Referer-based hotlink protection.
+// The frontend passes the real CDN URL via the ?url= query parameter.
+func (app *App) handleMediaProxy(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	if targetURL == "" {
+		writeError(w, http.StatusBadRequest, "missing url parameter")
+		return
+	}
+	if !strings.HasPrefix(targetURL, "https://") && !strings.HasPrefix(targetURL, "http://") {
+		writeError(w, http.StatusBadRequest, "url must be http or https")
+		return
+	}
+
+	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, targetURL, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid url")
+		return
+	}
+	proxyReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
+	proxyReq.Header.Set("Referer", "https://chat.qwen.ai/")
+	proxyReq.Header.Set("Accept", "image/*,video/*,*/*")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "upstream request failed")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		writeError(w, resp.StatusCode, fmt.Sprintf("upstream returned %d", resp.StatusCode))
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	if cl := resp.Header.Get("Content-Length"); cl != "" {
+		w.Header().Set("Content-Length", cl)
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, resp.Body)
 }
 
 func (app *App) pollVideoTask(ctx context.Context, token, taskID string, timeout time.Duration) (string, error) {

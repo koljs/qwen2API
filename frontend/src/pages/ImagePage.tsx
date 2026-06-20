@@ -4,6 +4,18 @@ import { Button } from "../components/ui/button"
 import { toast } from "sonner"
 import { getAuthHeader } from "../lib/auth"
 import { API_BASE } from "../lib/api"
+
+/** Proxy CDN URLs through the backend to bypass Referer-based hotlink protection */
+function proxyUrl(url: string): string {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    if (u.hostname.endsWith(".alicdn.com") || u.hostname.endsWith(".qwenlm.ai") || u.hostname === "chat.qwen.ai") {
+      return `${API_BASE}/api/media/proxy?url=${encodeURIComponent(url)}`
+    }
+  } catch { /* not a valid URL, return as-is */ }
+  return url
+}
 import {
   FALLBACK_IMAGE_MODELS,
   chooseDefaultModel,
@@ -309,7 +321,7 @@ export default function ImagePage() {
               <div key={`${img.url}-${idx}`} className="admin-card overflow-hidden group">
                 <div className="relative bg-muted/30">
                   <img
-                    src={img.url}
+                    src={proxyUrl(img.url)}
                     alt={img.revised_prompt}
                     className="w-full h-auto object-contain"
                     loading="lazy"
@@ -328,7 +340,7 @@ export default function ImagePage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => handleDownload(img.url, idx)}
+                      onClick={() => handleDownload(proxyUrl(img.url), idx)}
                       className="gap-1.5"
                     >
                       <Download className="h-3.5 w-3.5" /> 下载
@@ -336,7 +348,7 @@ export default function ImagePage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => window.open(img.url, "_blank")}
+                      onClick={() => window.open(proxyUrl(img.url), "_blank")}
                     >
                       在新窗口打开
                     </Button>
