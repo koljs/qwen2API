@@ -70,7 +70,7 @@ func parseTextKVToolCalls(text string, allowed map[string]string, tools []map[st
 		return nil
 	}
 	rawName := strings.Trim(strings.TrimSpace(strings.Split(strings.Join(values["name"], "\n"), "\n")[0]), `"'`)
-	name := canonicalToolName(rawName, allowed)
+	name := CanonicalToolName(rawName, allowed)
 	if name == "" {
 		return nil
 	}

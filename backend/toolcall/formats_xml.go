@@ -32,7 +32,7 @@ func parseXMLToolCalls(text string, allowed map[string]string) []ParsedToolCall 
 			if len(match) < 3 {
 				continue
 			}
-			name := canonicalToolName(match[1], allowed)
+			name := CanonicalToolName(match[1], allowed)
 			if name == "" {
 				continue
 			}

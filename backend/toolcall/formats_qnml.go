@@ -87,7 +87,7 @@ func parseQNMLToolCalls(text string, allowed map[string]string, tools []map[stri
 			if len(invoke) < 3 {
 				continue
 			}
-			name := canonicalToolName(extractNameAttr(invoke[1]), allowed)
+			name := CanonicalToolName(extractNameAttr(invoke[1]), allowed)
 			if name == "" {
 				continue
 			}
@@ -553,7 +553,7 @@ func extractLooseQNMLAttrs(text string, allowed map[string]string) []looseQNMLAt
 		if rawName == "" {
 			continue
 		}
-		if toolName := canonicalToolName(rawName, allowed); toolName != "" {
+		if toolName := CanonicalToolName(rawName, allowed); toolName != "" {
 			attrs = append(attrs, looseQNMLAttr{Name: toolName, Pos: match[0], IsTool: true, RawName: rawName})
 			continue
 		}

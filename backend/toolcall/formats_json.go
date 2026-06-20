@@ -30,7 +30,7 @@ func parseJSONToolCalls(value any, allowed map[string]string) []ParsedToolCall {
 				input = firstNonNil(fn["arguments"], fn["input"], fn["parameters"])
 			}
 		}
-		if name = canonicalToolName(name, allowed); name != "" {
+		if name = CanonicalToolName(name, allowed); name != "" {
 			calls = append(calls, ParsedToolCall{
 				ID:    firstNonEmpty(firstString(v["id"], v["call_id"]), "call_"+randomID()[:12]),
 				Name:  name,

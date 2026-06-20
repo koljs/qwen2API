@@ -9196,14 +9196,7 @@ func parseJSONToolCalls(value any, allowed map[string]string) []ParsedToolCall {
 }
 
 func canonicalToolName(name string, allowed map[string]string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	if exact, ok := allowed[strings.ToLower(name)]; ok {
-		return exact
-	}
-	return ""
+	return toolcall.CanonicalToolName(name, allowed)
 }
 
 func parseToolInput(text string) any {

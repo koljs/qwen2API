@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func canonicalToolName(name string, allowed map[string]string) string {
+func CanonicalToolName(name string, allowed map[string]string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ""
@@ -48,7 +48,7 @@ func qwenToolAlias(name string) string {
 	}
 	// Map Qwen tool aliases to their canonical IDE tool names.
 	// For tools that have different names across IDEs (e.g. Bash vs RunCommand),
-	// we return the most common alias; canonicalToolName will try all candidates.
+	// we return the most common alias; CanonicalToolName will try all candidates.
 	explicit := map[string]string{
 		"fs_open_file":        "Read",
 		"fs_put_file":         "Write",
